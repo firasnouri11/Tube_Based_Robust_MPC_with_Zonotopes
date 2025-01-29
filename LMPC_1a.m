@@ -6,7 +6,7 @@ close all
 A = [1 1; 0 1];
 B = [0; 1];
 
-NT=100;N=15;n=2;m=1; 
+NT=100;N=5;n=2;m=1; 
 Q=eye(n); QN=Q; R=0*eye(m); [K,P] = dlqr(A,B,Q,R); % at first we don't need K if we don't have any noise
 A_cl = A - B .* K; 
 x_min=[-1;-5];x_max=[60;5]; 
@@ -23,15 +23,12 @@ u=zeros(m,NT);
 Uk=zeros(m*N,1);
 zk=[Xk;Uk]; 
 
-% define reference trajectory to be tracked
-x_ref = zeros(n,(N+NT+1)); x_ref(1,10:40) = 40; x_ref(1,65:85) = 10; x_ref(2,10:80) = 0;
-u_ref = zeros(1,(N+NT));u_ref(:,10:80) = pinv(B)*(eye(n)-A)*x_ref(:,10:80);
-
 % define disturbance set W and calculate bounding set Epsilon
 w = zeros(n,NT); 
 W = zonotope([0; 0], [0.1 0;0  0.1]); % convex set of disturbance
 n_w = size(W.G,2);
 lambda = 10;
+s = 5; % desired order of Bounded Set Z
 %W = zonotope([0; 0], [ 0; 1]);
 [Z, Xc_robust, Uc_robust] = compute_disturbance_invariance_set(A,B,K,W,N,Xc,Uc);
 n_epsilon = size(Z.G,2);
@@ -62,7 +59,8 @@ ub=[reshape(x_max,1,[]) umax*ones(1,N*m)];
 %}
 x_predicted = zeros(n*(N+1),NT+1);
 u_predicted = zeros(m*N,NT);
-
+Phi_x = zeros(n,NT); % Scaling Matrix for Xc set in a vector series
+Phi_epsilon = zeros(n_epsilon,NT);
 % simulating system with MPC
 for k=1:NT
    % define current state x
@@ -70,28 +68,17 @@ for k=1:NT
    
    [Feq,geq] = add_eq_constr_zonotope(xk,A,B,K,N,Xc,Xc_robust,W,Z);
    [Fineq,gineq] = add_ineq_constr_zonotope(xk, Z, Xc_robust,Uc_robust,n,n_w, N);
-
-   %{ 
-   this was part of fmincon solver, no need to uncomment
-   z_ref_iter = [reshape(x_ref(:,k:(N+k)),[],1); u_ref(k:(N+k-1))'];
-   % define cost function as a reference tracking problem (input is not weighted) 
-   fun = @(z)(z_ref_iter - z)'*H*(z_ref_iter -z);
    
-   F=[];g=[];Feq=[eye((N+1)*n) -BU];geq=AX*xk;
-   %z1=fmincon(fun,zk,F,g,Feq,geq,lb,ub);
-   %}
-   
-   scaled_x_ref = -1 * [reshape(x_ref(:,k:(k+N)),[],1); zeros(N,1)];
-   f = Weight_matrix* scaled_x_ref;
-   f((n*N+1):(n*N+2)) = [0;0];
+   % only use this H matrix & f vector if we only want set containment (No MPC)
+   Weight_matrix = zeros(size(Weight_matrix));
+   f = zeros(size(f,1),1);
    [H, f] = construct_cost_function(Weight_matrix,f,lambda,n,n_w, n_epsilon);
    zk = [xk; zeros(size(H,2)-size(xk,1),1)];
    
    options = optimoptions('quadprog', 'Algorithm', 'active-set',  'Display', 'iter');
-   %options = optimoptions('quadprog', 'Display', 'iter');
-   tStart = cputime;
+   tic
    z1=quadprog(H,f,Fineq,gineq,Feq,geq,[],[],zk,options);
-   tEnd = cputime - tStart
+   toc
 
    x_predicted(:,k) = z1(1:n*(N+1),1);
    u_predicted(:,k) = z1((N+1)*n+1:(N+1)*n+N,1);
@@ -99,17 +86,16 @@ for k=1:NT
    %u(:,k) = max(min(u(:,k),umax), umin); % check plausibility
    
    % create random noise based on scaled disturbance set W_scaled
-   k_epsilon = n*(N+1)+N+n; %+n_w+n+2*n*(n+n_epsilon)+2*n;
-   Phi_w = diag(z1((k_epsilon+1):(k_epsilon+n_w)));
+   k_w = n*(N+1)+N+n; %+n_w+n+2*n*(n+n_epsilon)+2*n;
+   k_epsilon = n*(N+1)+N+n+n_w+n+2*n*(n+n_epsilon)+2*n;
+   Phi_x(:,k) = z1(n*(N+1)+N+1:n*(N+1)+N+n);
+   Phi_epsilon(:,k) = diag(z1((k_epsilon+1):(k_epsilon+n_epsilon)));
+   Phi_w = diag(z1((k_w+1):(k_w+n_w)));
    W_scaled = zonotope(W.c,W.G*Phi_w);
    w(:,k) = randPoint(W_scaled);
-
-   % propagate to the system
-   x(:,k+1)= A * x(:,k) + B * u(:,k) + [1;1] .* w(:,k);
-   zk = z1;
 end
-
-
+average_phi_x = diag(mean(Phi_x,2));
+average_phi_epsilon = diag(mean(Phi_epsilon,2));
 % plotting response
 figure(1)
 time = (0:NT);
@@ -145,12 +131,22 @@ ax.GridAlpha = 1
 ax.GridLineStyle = ':'
 print -dsvg lmpc1
 figure(2)
-plot(zonotope(Xc.c,Xc.G*diag(zk((2*(N+1)+N+1):(2*(N+1)+N+n))))) % plotting scaled Xc set
+plot(zonotope(Xc_robust.c,Xc_robust.G*average_Phi_x)); % plotting scaled Xc set
 hold on
 plot(Xc)
-plot(x(1,:),x(2,:))
-plot(x(1,1),x(2,1), 'r')
-plot(x(1,NT),x(2,NT), 'x')
+xlabel('$x_{1}$','Interpreter','latex');ylabel('$\textbf{x}_{2}$','Interpreter','latex');
+legend('$X_{c,robust} scaled$','$X_{c}$','$X_{c,robust}$','Interpreter','latex');
+figure(3)
+plot(zonotope(Xc_robust.c,Xc_robust.G*average_Phi_x));
+xlabel('$x_{1}$','Interpreter','latex');ylabel('$\textbf{x}_{2}$','Interpreter','latex');
+legend('$X_{c,robust} scaled$','Interpreter','latex');
+figure(4)
+plot(zonotope(Z.c,Z.G*average_Phi_epsilon)); % plotting scaled Xc set
+hold on
+plot(Z)
+xlabel('$x_{1}$','Interpreter','latex');ylabel('$\textbf{x}_{2}$','Interpreter','latex');
+legend('$Z_{scaled}$','$Z$','Interpreter','latex');
+grid on
 
 
 function [Error_Zonotope, Xc_robust, Uc_robust] = compute_disturbance_invariance_set(A,B,K,W,N,Xc,Uc)
@@ -172,7 +168,6 @@ function [Error_Zonotope, Xc_robust, Uc_robust] = compute_disturbance_invariance
     plot(Xc_robust,[1 2], 'r'); %plot(Uc_robust,[1 2]);
     %}
 end
-
 
 
 
