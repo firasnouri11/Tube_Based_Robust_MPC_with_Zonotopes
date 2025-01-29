@@ -2,7 +2,7 @@ function [H_new,f_new] = construct_cost_function(H,f,lambda,n_x,n_w, n_epsilon)
 
 % build the H matrix and f vector to accomodate the scaling matrix
 % variables
-H_scaling_matrix = 1 * blkdiag(eye(n_x), lambda * eye(n_w)); % H matrix for quadprog;
+H_scaling_matrix = -1 * blkdiag(eye(n_x), lambda * eye(n_w)); % H matrix for quadprog;
 f_scaling_matrix = zeros(size(H_scaling_matrix,1),1);
 H_new = blkdiag(H,H_scaling_matrix);
 f_new = [f;f_scaling_matrix];
