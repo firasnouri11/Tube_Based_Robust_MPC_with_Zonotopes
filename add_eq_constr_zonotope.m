@@ -23,19 +23,17 @@ for j=1:size(Xeq,1)
     end
 end
 Feq = [Xeq Ueq];
-Feq = zeros(size(Feq,1), size(Feq,2));
-% construct x_predicted - Xc_robust.G * Ksi_x = Xc_robust.c
-F_X_predicted = eye(nx * (N+1));
+
+F_X_predicted = eye(nx);
 F_G_x = -Xc_robust.G;
-for i=1:N
-    F_G_x = [F_G_x;-Xc_robust.G];
-end
-F = [F_X_predicted zeros(size(F_X_predicted,1),(N+nx+n_w)) F_G_x];
+F = [F_X_predicted zeros(size(F_X_predicted,1),(nx*N+N+nx+n_w)) F_G_x];
 Feq = [Feq zeros(size(Feq,1), size(F,2)-size(Feq,2)); F];
 g = [Xc.c];
+%{
 for i=1:N
     g = [g; Xc.c];
 end
+%}
 geq = [geq;g];
 
 % construct [Gx_tilde*Phi_x G_epsilon*Phi_epsilon] - G_x*Gamma_1 = 0
@@ -89,14 +87,5 @@ Feq = blkdiag(Feq,F_Beta_2);
 geq = [geq; I_A_cl];
 
 Feq = [Feq zeros(size(Feq,1),n_epsilon)];
-%{
-% Construct x(k) - x_predicted(k|k) ∈ Epsilon_tilde={G_epsilon*Phi_epsilon, c_epsilon}
-% x_predicted(k|k) + G_epsilon*Ksi_epsilon = x(k) - c_epsilon
-F_X_predicted_at_k = eye(nx);
-F_G_epsilon_ksi_epsilon = [zeros(size(F_X_predicted_at_k,1),n_epsilon) Z.G];
-Feq = blkdiag(Feq,F_G_epsilon_ksi_epsilon);
-Feq((size(Feq,1)-1):size(Feq,1),1:2) = F_X_predicted_at_k;
-g_x_minus_c_epsilon = x_init - Z.c;
-geq = [geq; g_x_minus_c_epsilon];
-%}
+
 end
