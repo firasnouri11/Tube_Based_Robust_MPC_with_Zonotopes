@@ -29,11 +29,6 @@ F_G_x = -Xc_robust.G;
 F = [F_X_predicted zeros(size(F_X_predicted,1),(nx*N+N+nx+n_w)) F_G_x];
 Feq = [Feq zeros(size(Feq,1), size(F,2)-size(Feq,2)); F];
 g = [Xc.c];
-%{
-for i=1:N
-    g = [g; Xc.c];
-end
-%}
 geq = [geq;g];
 
 % construct [Gx_tilde*Phi_x G_epsilon*Phi_epsilon] - G_x*Gamma_1 = 0
