@@ -81,15 +81,5 @@ g_row_Lambda_Miu_2_3 = zeros(n_epsilon,1);
 
 F_ineq = [F_ineq; F_row_Lambda_Miu_2_3];
 g_ineq = [g_ineq; g_row_Lambda_Miu_2_3];
-%{
-% Construct -Phi_epsilon <= Ksi_epsilon <= Phi_epsilon 
-% 2 inequalities for every element of Ksi_epsilon : -Phi_epsilon -Ksi_epsilon <= 0
-% and Ksi_epsilon - Phi_epsilon <= 0
-F_Ksi_epsilon = [-eye(n_epsilon); eye(n_epsilon)];
-F_Phi_epsilon = [-eye(n_epsilon); -eye(n_epsilon)];
-F_Phi_Ksi_epsilon = [zeros(size(F_Phi_epsilon,1),n_x*(N+1)+N+n_x+n_w+n_x+2*(n_x*(n_x+n_epsilon)+n_x)) F_Phi_epsilon zeros(size(F_Ksi_epsilon,1),2*(n_epsilon^2+n_epsilon*n_w+n_epsilon)) F_Ksi_epsilon];
-g_Phi_Ksi_epsilon = zeros(size(F_Phi_Ksi_epsilon,1),1);
-F_ineq = [F_ineq zeros(size(F_ineq,1),n_epsilon); F_Phi_Ksi_epsilon];
-g_ineq = [g_ineq; g_Phi_Ksi_epsilon];
-%}
+
 end
